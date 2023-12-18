@@ -20,6 +20,8 @@ using namespace std;
 #define PORT 8080
 #define MAXLINE 1024
 #define CHUNK_SIZE 500
+#define WINDOW_SIZE 4
+#define TIMEOUT 15
 
 void handleClient(const int sockfd, const sockaddr_in& clientAddr, const char* filename);
 void sendPacket(const int sockfd, const struct packet& packet, const sockaddr_in& clientAddr);
@@ -27,7 +29,28 @@ void receiveAck(const int sockfd, uint32_t expectedSequenceNumber, const sockadd
 void sendAck(int sockfd, int seqno, const sockaddr_in& clientAddr);
 void sendFile(const int sockfd, const char* filename, const sockaddr_in& clientAddr);
 vector<string> splitFile(const char* filename);
+/*
+pair<int, time_t> x = time_sequence.front();
+                while(time(NULL) - x.second >= TIMEOUT) {
+                    time_sequence.pop();
+                    struct packet dataPacket;
+                    dataPacket.seqno = x.first;
+                    strncpy(dataPacket.data, chunks[x.first].c_str(), CHUNK_SIZE);
+                    dataPacket.len = sizeof(dataPacket);
+                    cout << "Sent data: " << dataPacket.data << endl;
 
+                    // Save sending time
+                    time_t starttime = time(NULL);
+                    time_sequence.push(make_pair(x.first, starttime));
+                    sent[x.first] = true;
+                    // Send data packet
+                    sendPacket(sockfd, dataPacket, clientAddr);
+                    if(time_sequence.size() > 0)
+                        x = time_sequence.front();
+                    else
+                        break;
+                }
+*/
 int main() {
     int sockfd; 
     struct packet packet;
@@ -62,15 +85,6 @@ int main() {
                 &clientAddrLen); 
         cout << packet.data << endl;
         
-        /*
-        // Accept a new connection
-        int clientSocket = accept(sockfd, (struct sockaddr*)&clientAddr, &clientAddrLen);
-
-        if (clientSocket < 0) {
-            // cerr << "Error accepting connection" << endl;
-            continue;
-        }*/
-        //handleClient(sockfd, clientAddr, packet.data);
         // Fork a child process to handle the client
         pid_t childPid = fork();
 
@@ -89,7 +103,6 @@ int main() {
             exit(0);
         } else if (childPid > 0) {
             // Parent process
-            //close(clientSocket); // Close the client socket in the parent
         } else {
             cerr << "Error forking process" << endl;
         }
@@ -133,8 +146,105 @@ vector<string> splitFile(const char* filename) {
     return chunks;
 }
 
-// Send and wait
+// Buffer acked
+// Buffer notacked
+// window (seq no)
+// Send packet -> Add to not acked
+// Receive ack -> remove from notacked -> add to acked
+// if ackno = window_base -> slide window to last unacked packet -> send new packets
+
+// Selective repeat
 void sendFile(int sockfd, const char* filename, const sockaddr_in& clientAddr) {
+    vector<string> chunks = splitFile(filename);
+
+    int numOfPackets = chunks.size();
+    bool acked[numOfPackets];
+    bool sent[numOfPackets];
+    memset(acked, false, sizeof(acked));
+    memset(sent, false, sizeof(sent));
+
+    queue<pair<int, time_t>> time_sequence;
+
+    int sequenceNumber = 0;
+    int window_base = 0;
+    cout << "Num of packets: " << numOfPackets << endl;
+    while(window_base < numOfPackets) {
+        for(int j = window_base; j < window_base + WINDOW_SIZE && j < numOfPackets; j++) {
+            if(!sent[j]) {
+                struct packet dataPacket;
+                dataPacket.seqno = j;
+                strncpy(dataPacket.data, chunks[j].c_str(), CHUNK_SIZE);
+                dataPacket.len = sizeof(dataPacket);
+                //cout << "Sent data: " << dataPacket.data << endl;
+
+                // Save sending time
+                time_t starttime = time(NULL);
+                time_sequence.push(make_pair(j, starttime));
+                sent[j] = true;
+                
+                // Send data packet
+                sendPacket(sockfd, dataPacket, clientAddr);
+            }
+        }
+        int last_base = window_base;
+        while(last_base == window_base) { // No ack is received
+            struct ack_packet ackPacket;
+            socklen_t clientAddrLen = sizeof(clientAddr);
+            int bytes = recvfrom(sockfd, &ackPacket, sizeof(struct ack_packet), MSG_DONTWAIT, (struct sockaddr*)&clientAddr, &clientAddrLen);
+            if(bytes != sizeof(ack_packet)) {
+                continue;
+            }
+            if(ackPacket.ackno < window_base || ackPacket.ackno >= window_base + WINDOW_SIZE)
+                continue;
+            acked[ackPacket.ackno] = 1;
+            cout << "Sliding window to " << window_base << endl;
+            if(window_base == ackPacket.ackno) {
+                window_base++;
+                while(acked[window_base])// Slide window to last acknowledged
+                    window_base++;
+            }
+        }
+    }
+    struct packet dataPacket;
+    // End of file, send a special packet to indicate completion
+    dataPacket.seqno = UINT32_MAX;
+    string msg = "End of file";
+    strncpy(dataPacket.data, msg.c_str(), CHUNK_SIZE);
+    dataPacket.len = sizeof(dataPacket);
+    sendPacket(sockfd, dataPacket, clientAddr);
+}
+
+/*
+pair<int, time_t> x = time_sequence.front();
+            while(time(NULL) - x.second >= TIMEOUT || acked[x.first]) {
+                time_sequence.pop();
+                if(acked[x.first]) {
+                    if(time_sequence.size() > 0)
+                        x = time_sequence.front();
+                    else
+                        break;
+                    continue;
+                }
+                struct packet dataPacket;
+                dataPacket.seqno = x.first;
+                strncpy(dataPacket.data, chunks[x.first].c_str(), CHUNK_SIZE);
+                dataPacket.len = sizeof(dataPacket);
+                cout << "Sent data: " << dataPacket.data << endl;
+
+                // Save sending time
+                time_t starttime = time(NULL);
+                time_sequence.push(make_pair(x.first, starttime));
+                sent[x.first] = true;
+                // Send data packet
+                sendPacket(sockfd, dataPacket, clientAddr);
+                if(time_sequence.size() > 0)
+                    x = time_sequence.front();
+                else
+                    break;
+            }
+*/
+// Stop and wait
+void sendFileStopWait(int sockfd, const char* filename, const sockaddr_in& clientAddr) {
     vector<string> chunks = splitFile(filename);
     int sequenceNumber = 0;
 
