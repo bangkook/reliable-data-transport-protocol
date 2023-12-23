@@ -1,0 +1,503 @@
+#include <iostream>
+#include <bits/stdc++.h>
+#include <string>
+
+using namespace std;
+typedef long long ll;
+typedef unsigned long long ull;
+#define PI 3.14159265359
+#define MP make_pair
+#define pii pair<int, int>
+#define f first
+#define s second
+
+const int MOD = (int)1e9 + 7;
+const int OO = (int)1e9 + 10;
+const int EPS = (int)1e-8;
+const int N = (int)1e5 + 10;
+
+ll gcd(ll a, ll b) { return !b ? a : gcd(b, a % b); }
+ll lcm(ll a, ll b) { return (a / gcd(a, b)) * b; }
+
+void PLAY() {
+/*
+#ifndef ONLINE_JUDGE
+	freopen("input.txt", "r", stdin);
+	freopen("output.txt", "w", stdout);
+#endif
+*/
+	cout << fixed << setprecision(10);
+	ios::sync_with_stdio(0);
+	cin.tie(0);
+	cout.tie(0);
+}
+
+int countBits(int n){
+    int cnt = 0;
+    while(n){
+        if(n & 1)
+            cnt++;
+        n = n >> 1;
+    }
+    return cnt;
+}
+
+/*int gcd(int a, int b) {
+    if (b == 0)
+        return a;
+    return gcd(b, a % b);
+}*/
+
+int calculateDistance(int x1, int y1, int x2, int y2) {
+    return (x1 - x2) * (x1 - x2) + (y1 - y2) * (y1 - y2);
+}
+
+/* Modular Exponentiation */
+inline ll power(long long x, ll y, int p)
+{
+    ll res = 1;
+
+    x = x % p;
+    if (x == 0) return 0;
+
+    while (y > 0)
+    {
+        if (y & 1)
+            res = (res*x) % p;
+
+        y = y>>1;
+        x = (x*x) % p;
+    }
+    return res;
+}
+
+/*
+int bfs(int sx, int sy, int tx, int ty) {
+
+    int dx[] = {0, 1, 0, -1};
+int dy[] = {-1, 0, 1, 0};
+
+bool vis[101][N];
+int len[101][N], c[101], n;
+
+	queue<pii> q;
+	q.push(MP(sx, sy));
+	len[sx][sy] = 0;
+    vis[sx][sy] = 1;
+
+	while(!q.empty()) {
+		int a = q.front().first, b = q.front().second;
+        q.pop();
+
+        //cout << a<< " " << b << " " << len[a][b] << endl;
+
+		if(a == tx && b == ty)
+            break;
+
+		for(int i = 0; i < 4; i++){
+            int x = a + dx[i];
+            int y = b + dy[i];
+            if(x >= 0 && x < n && x != a && y > c[x]) y = c[x];
+            if(valid(x, y) && !(vis[x][y])) {
+                len[x][y] = len[a][b] + 1, q.push(MP(x, y));
+                vis[x][y] = 1;
+            }
+		}
+	}
+
+	return len[tx][ty];
+}
+*/
+struct edge {
+    int from, to, w;
+    edge(int f, int t, int wt){
+        from = f;
+        to = t;
+        w = wt;
+    }
+    bool operator < (const edge & e) const {
+		return w > e.w;
+	}
+};
+
+bool cmp(edge a, edge b){
+    return a.w < b.w;
+}
+
+/*int parent[1000010], sz[1000010];
+
+void make_set(int v) {
+    parent[v] = v;
+    sz[v] = 1;
+}
+
+int find_set(int v) {
+    if (v == parent[v])
+        return v;
+    return parent[v];// = find_set(parent[v]);
+}
+
+int union_sets(int a, int b) {
+    a = find_set(a);
+    b = find_set(b);
+    if (a != b) {
+        //if (sz[a] < sz[b])
+          //  swap(a, b);
+        parent[b] = a;
+        sz[a] += sz[b];
+        return 1;
+    }
+    return 0;
+}
+*/
+bool cmpByStr(pair<string, string> a, pair<string, string> b){
+    return a.first.size() < b.first.size() || (a.first.size() == b.first.size() && a.first < b.first);
+}
+
+bool sortBySec(pair<int, int> a, pair<int, int> b){
+    if(a.first == b.first)
+        return a.second < b.second;
+    return a.first > b.first;
+}
+
+bool mySort(pair<int, pii> a, pair<int, pii> b){
+    return a.first < b.first ||
+    (a.first == b.first && a.second.first > b.second.first) ||
+    (a.first == b.first && a.second.first == b.second.first && a.second.second < b.second.second);
+}
+
+
+/*
+bool visited[N];
+vector<vector<int> > adj(N);
+vector<ll> ans(N), cost(N);
+
+int dfs(int v){
+    visited[v] = true;
+
+    ll k = (adj[v].size() == 0? INT_MAX : 0);
+    for(int i = 0; i < adj[v].size(); i++){
+        if(!visited[adj[v][i]]){
+            k += dfs(adj[v][i]);
+        } else {
+            k += ans[adj[v][i]];
+        }
+    }
+    //cout << v << " " << cost[v] << " " << k << endl;
+    return ans[v] = min(cost[v], k);
+}
+
+
+int n, m, k;
+char maze[501][501];
+bool vis[501][501];
+void dfs(int x, int y){
+    vis[x][y] = 1;
+    int l = 0;
+
+    // x + 1, y
+    if(x + 1 < n && maze[x+1][y] == '.' && !vis[x+1][y]){
+        dfs(x+1, y);
+        l++;
+        if(maze[x+1][y] == 'X') l--;
+    }
+
+    // x, y + 1
+    if(y + 1 < m && maze[x][y+1] == '.' && !vis[x][y+1]){
+        dfs(x, y+1);
+        l++;
+        if(maze[x][y+1] == 'X') l--;
+    }
+
+    // x - 1, y
+    if(x - 1 >= 0 && maze[x-1][y] == '.' && !vis[x-1][y]){
+        dfs(x-1, y);
+        l++;
+        if(maze[x-1][y] == 'X') l--;
+    }
+
+    // x, y - 1
+    if(y - 1 >= 0 && maze[x][y-1] == '.' && !vis[x][y-1]){
+        dfs(x, y-1);
+        l++;
+        if(maze[x][y-1] == 'X') l--;
+    }
+    if(k && !l)
+        maze[x][y] = 'X', k--;
+}
+*/
+
+#define MX 18888
+void sieve()
+{
+    vector<bool> prime(MX, true);
+    vector<int> p(4792);
+    int pos = 0;
+    int i,j;
+
+    for(int i = 4; i < MX; i+= 2)
+        prime[i] = false;
+    p[pos++] = 2;
+    for(i=3;i<MX;i+=2)
+    {
+        if(prime[i]==true)
+        {
+            p[pos++] = i;
+            for(j=i*i;j<MX;j+=i+i)
+            {
+                prime[j]=false;
+            }
+        }
+    }
+
+//    for(i=2;i<=1000000;i++)
+//    {
+//     if(prime[i]) p.push_back(i);
+//    }
+}
+
+ll nCr(int n, int r){
+    double sum = 1;
+    for(int i = 1; i <= r; i++){
+        sum = sum * (n - r + i) / i;
+    }
+    return (ll)sum;
+}
+
+string letters = "0123456789ABCDEF";
+int toInt(char c){ return letters.find(c); }
+
+unsigned int FromAnyBasetoDecimal(string in, int base){
+    unsigned int res = 0;
+    for(size_t i = 0; i < in.size(); ++i)
+        res *= base, res += toInt(in[i]);
+    return res;
+}
+
+string FromDecimaltoAnyBase(unsigned int number, int base){
+    if(number == 0)
+        return 0;
+
+    string res = "";
+    for(; number; number /= base)
+        res = letters[number % base] + res;
+    return res;
+}
+
+string AddBinaryNoCarry(string b1, string b2){
+    string res = "";
+
+    if(b1.size() < b2.size())
+        swap(b1, b2);
+
+    int diff = b1.size() - b2.size();
+
+    for(int i = 0; i < diff; i++)
+        res += b1[i];
+
+    for(int i = diff; i < b1.size(); i++){
+        res += (b1[i] - '0' + b2[i-diff] - '0') % 2 + '0';
+    }
+
+    return res;
+}
+
+ll evaluate(int x){
+    int n, c[1001];
+    ll res = 0, xx = 1;
+    for(int i = n - 1; i >= 0; i--)
+        res += xx * c[i], xx *= x;
+    return res;
+}
+
+vector<pii> f;
+void primeFactors(int n)
+{
+    int cnt = 0;
+    while (n % 2 == 0)
+    {
+        cnt++;
+        n = n/2;
+    }
+    if(cnt) f.push_back({2, cnt});
+    for (int i = 3; i * i <= n; i = i + 2)
+    {
+        cnt = 0;
+        while (n % i == 0)
+        {
+            cnt++;
+            n = n/i;
+        }
+        if(cnt) f.push_back({i, cnt});
+    }
+
+    if (n > 1)
+        f.push_back({n, 1});
+}
+
+string s, t;
+int LCS(int i, int j){
+    int dp[101][101];
+
+    if(i == s.size() || j == t.size())
+        return 0;
+
+    if(dp[i][j] != -1)
+        return dp[i][j];
+
+    if(s[i] == t[j])
+        return dp[i][j] = 1 + LCS(i+1, j+1);
+
+    int choice1 = LCS(i, j+1);
+    int choice2 = LCS(i+1, j);
+
+    return dp[i][j] = max(choice1, choice2);
+}
+
+bool palindrome(string s, int i, int j){
+    int n = j - i + 1;
+    return s.substr(i, n/2) == s.substr(ceil(n/2.0), n/2);
+}
+
+ll best(int i, int j){
+    ll dp[305][305];
+    string a;
+    if(i == j){
+        return 1;
+    }
+
+    ll &ret = dp[i][j];
+
+    if(ret != -1)
+        return ret;
+
+    if(a[i] != a[j]) return 0;
+
+    ret = 0;
+    for(int s = i + 2; s <= j; s++){
+        if(a[s] == a[i]){
+            ret = (ret + best(i+1, s-1) * best(s, j)) % MOD;
+        }
+    }
+    return ret;
+}
+
+/*
+ll backtrack(int i, ll res, ll cost){
+    if(i == parts.size()){
+        return res;
+    }
+
+    if(cost > bud)
+        return -1;
+
+    string p = parts[i];
+
+    ll q = 0;
+    for(int j = 0; j < mp[p].size(); j++){
+        q = max(q, backtrack(i+1, min(res, mp[p][j].second), cost+mp[p][j].first));
+    }
+    return q;
+}
+*/
+
+char uniq(char a, char b){
+    for(char c = 'a'; c <= 'z'; c++){
+        if(c != a && c != b)
+            return c;
+    }
+}
+
+vector<int> tokenize(string s, string del = " ")
+{
+    vector<int> v;
+    int start, end = -1*del.size();
+    do {
+        start = end + del.size();
+        end = s.find(del, start);
+        //v.push_back(stoi(s.substr(start, end - start)));
+    } while (end != -1);
+    return v;
+}
+
+double triangleArea(double x1, double y1, double x2, double y2, double x3, double y3){
+    return fabs(x1 * (y2 - y3) + x2 * (y3 - y1) + x3 * (y1 - y2)) / 2;
+}
+
+bool sortArr(vector<int> a, vector<int> b){
+    return a[0] < b[0] || (a[0] == b[0] && a[1] < b[1]) || (a[0] == b[0] && a[1] == b[1] && a[2] < b[2]);
+}
+
+int dx[] = {-1, -1, 0, 1, 1, 1, 0, -1};
+int dy[] = {0, 1, 1, 1, 0, -1, -1, -1};
+
+deque<pii> Q;
+int dist[1001][1001];
+char grid[1001][1001];
+int r, c;
+
+void zeroOneBFS(int rs, int cs, int rd, int cd){
+    Q.clear();
+    Q.push_back({rs, cs});
+
+    dist[rs][cs] = 0;
+
+    while(!Q.empty()){
+        pii cur = Q.front();
+        Q.pop_front();
+
+        if(cur.f == rd && cur.s == cd)
+            break;
+
+        for(int i = 0; i < 8; i++){
+            int x = cur.f + dx[i];
+            int y = cur.s + dy[i];
+           // cout << cur.f << ' ' << cur.s << ' ' << x << " " << y << endl;
+            if(x < 1 || y < 1 || x > r || y > c)
+                continue;
+            int add = (i == (grid[cur.f][cur.s]-'0'))? 0 : 1;
+            if(dist[x][y] > dist[cur.f][cur.s] + add){
+                dist[x][y] = dist[cur.f][cur.s] + add;
+                if(add)
+                    Q.push_back({x, y});
+                else
+                    Q.push_front({x, y});
+            }
+        }
+    }
+}
+void solve(){
+    cin >> r >> c;
+
+    for(int i = 1; i <= r; i++)
+        for(int j = 1; j <= c; j++)
+            cin >> grid[i][j];
+
+    int n;
+    cin >> n;
+
+    while(n--){
+
+        int rs, cs, rd, cd;
+        cin >> rs >> cs >> rd >> cd;
+
+        for(int i = 1; i <= r; i++)
+            for(int j = 1; j <= c; j++)
+                dist[i][j] = INT_MAX;
+
+        zeroOneBFS(rs, cs, rd, cd);
+        cout << dist[rd][cd] << endl;
+    }
+}
+
+int main()
+{
+    PLAY();
+    int t = 1;
+    //int t;
+    //cin >> t;
+    while(t--){
+        solve();
+    }
+    return 0;
+}

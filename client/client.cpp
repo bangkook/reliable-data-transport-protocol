@@ -25,15 +25,20 @@ using namespace std;
 
 void sendPacket(const struct packet packet, struct sockaddr_in server_addr);
 void sendFileRequest(const char* filename, struct sockaddr_in server_addr);
-void recieveFile(struct sockaddr_in server_addr, const char* filename);
-bool receiveAck(int sockfd, uint32_t expectedSequenceNumber, const sockaddr_in& server_addr);
+void recieveFile(struct sockaddr_in server_addr, const char* filename, int fileSize);
+int receiveAck(int sockfd, uint32_t expectedSequenceNumber, const sockaddr_in& server_addr);
 void sendAck(int seqno, struct sockaddr_in server_addr);
+vector<string> readArgs(string filename);
 
 int sockfd;
 
 int main() {
-    char* server_ip = "127.0.0.1";
-    in_port_t server_port = PORT;
+    vector<string> args = readArgs("client.in");
+
+    const char* server_ip = args[0].c_str();
+    in_port_t server_port = stoi(args[1]);
+    string filename = args[2];
+
     int rtn_val;
     struct sockaddr_in server_addr;
 
@@ -46,13 +51,7 @@ int main() {
     server_addr.sin_port = htons(server_port);
     inet_pton(AF_INET, server_ip, &(server_addr.sin_addr));
 
-    // Set timeout to resend packet if datagram is lost
-    //struct timeval timeout;
-    //timeout.tv_sec = TIMEOUT;
-    //timeout.tv_usec = 0;
-    //setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
-
-    sendFileRequest("code.txt", server_addr);
+    sendFileRequest(filename.c_str(), server_addr);
 
     close(sockfd);
     return 0;
@@ -72,9 +71,10 @@ void sendFileRequest(const char* filename, struct sockaddr_in server_addr) {
     // Send file request packet
     sendPacket(requestPacket, server_addr);
     time_t starttime = time(NULL);
-
+    int len = 0;
     while(true) {
-        if(receiveAck(sockfd, requestPacket.seqno, server_addr))
+        len = receiveAck(sockfd, requestPacket.seqno, server_addr);
+        if(len > -1)
             break;
         // If timeout happens, resend packet
         if(time(NULL) - starttime >= TIMEOUT) {
@@ -85,44 +85,40 @@ void sendFileRequest(const char* filename, struct sockaddr_in server_addr) {
     }
 
     // Recieve data
-    recieveFile(server_addr, filename);
+    recieveFile(server_addr, filename, len);
 }
 
-void recieveFile(struct sockaddr_in server_addr, const char* filename) {
-    FILE* file = fopen(filename, "wb");
-    if (!file) {
-        std::cerr << "Error opening file: " << filename << std::endl;
-        return;
-    }
-
+void recieveFile(struct sockaddr_in server_addr, const char* filename, int fileSize) {
     int expectedSequenceNumber = 0;
-    struct packet dataPacket;
     socklen_t serverAddrLen = sizeof(server_addr);
     size_t bytes_recv;
+    string data[fileSize];
 
     while (true) {
+        struct packet dataPacket;
         bytes_recv = recvfrom(sockfd, &dataPacket, sizeof(struct packet), 0, (struct sockaddr*)&server_addr, &serverAddrLen);
-        cout << dataPacket.data << endl;
-        cout << dataPacket.len << endl;
-        // Check if the acknowledgment is for the correct sequence number
-        if (dataPacket.seqno == expectedSequenceNumber) {
-            cout << "Data received with sequence number: " << dataPacket.seqno << endl;
-            sendAck(dataPacket.seqno, server_addr);
-            // Write data to the file
-            fwrite(dataPacket.data, 1, strlen(dataPacket.data), file);
-            // Increment sequence number for the next packet
-            expectedSequenceNumber++;
-        } else if (dataPacket.seqno == UINT32_MAX) { 
+        if (dataPacket.seqno == UINT32_MAX) { 
             // End of file marker received
             sendAck(dataPacket.seqno, server_addr);
             cout << "End of file" << endl;
             break;
-        } else {
-            cerr << "Unexpected packet received with sequence number: " << dataPacket.seqno << endl;
         }
+        // Check if the acknowledgment is for the correct sequence number
+        if(dataPacket.seqno < fileSize)
+            data[dataPacket.seqno] = dataPacket.data;
+        cout << "Data received with sequence number: " << dataPacket.seqno << endl;
+        sendAck(dataPacket.seqno, server_addr);        
     }
 
-    fclose(file);
+    ofstream file(filename, ios::binary);
+    if (!file) {
+        cerr << "Error opening file: " << filename << endl;
+        error("");
+    }
+    for(int i = 0; i < fileSize; i++) {
+        file.write(data[i].c_str(), data[i].length());
+    }
+    file.close();
 }
 
 void sendAck(int seqno, struct sockaddr_in server_addr) {
@@ -132,21 +128,37 @@ void sendAck(int seqno, struct sockaddr_in server_addr) {
     sendto(sockfd, &ackPacket, sizeof(struct ack_packet), 0, (struct sockaddr*)&server_addr, sizeof(server_addr));
 }
 
-bool receiveAck(int sockfd, uint32_t expectedSequenceNumber, const sockaddr_in& server_addr) {
+int receiveAck(int sockfd, uint32_t expectedSequenceNumber, const sockaddr_in& server_addr) {
     struct ack_packet ackPacket;
     socklen_t serverAddrLen = sizeof(server_addr);
     size_t bytes = recvfrom(sockfd, &ackPacket, sizeof(struct ack_packet), MSG_DONTWAIT, (struct sockaddr*)&server_addr, &serverAddrLen);
 
     // No acknowledge is received
     if(bytes != sizeof(struct ack_packet))
-        return false;
+        return -1;
 
     // Check if the acknowledgment is for the correct sequence number
     if (ackPacket.ackno == expectedSequenceNumber) {
         cout << "Acknowledgment received for sequence number: " << ackPacket.ackno << endl;
-        return true;
+        return ackPacket.len;
     } 
 
     cerr << "Unexpected acknowledgment received for sequence number: " << ackPacket.ackno << endl;
-    return false;
+    return -1;
+}
+
+vector<string> readArgs(string filename) {
+    vector<string> args;
+    ifstream file(filename, ios::binary);
+
+    if (!file) {
+        cerr << "Error opening file: " << filename << endl;
+        return args;
+    }
+
+    string line;
+    while(getline(file, line)) {
+        args.push_back(line);
+    }
+    return args;
 }
